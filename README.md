@@ -1,8 +1,23 @@
 # agent-toolwall
 
-Lightweight runtime policy-enforcement layer ("firewall") for LLM agent
-tool-calls: allow-lists, argument validation, rate limits, human-in-loop
-escalation for sensitive actions. Defensive complement to
-agent-injection-bench (which measures the attack surface this addresses).
+Policy enforcement between an LLM agent's tool decision and tool execution.
 
-Status: scaffolding. See PLAN.md once generated.
+## Quickstart
+
+```python
+from toolwall import Effect, Toolwall
+from toolwall.policies import tool_allowlist
+
+wall = Toolwall(
+    [tool_allowlist(["read_file"])],
+    default=Effect.DENY,
+)
+
+allowed = wall.check("read_file", {"path": "a"})
+blocked = wall.check("send_email", {})
+
+assert allowed.effect is Effect.ALLOW
+assert blocked.effect is Effect.DENY
+assert blocked.reason == "default"
+print(allowed.effect.value, blocked.effect.value)
+```
