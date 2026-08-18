@@ -3,7 +3,14 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
-from .types import Decision, Effect, Policy, ToolCall, ToolCallBlocked
+from .types import (
+    Decision,
+    Effect,
+    NormalizationError,
+    Policy,
+    ToolCall,
+    ToolCallBlocked,
+)
 
 
 class Toolwall:
@@ -27,7 +34,10 @@ class Toolwall:
         context: dict[str, Any] | None = None,
     ) -> Decision:
         copied_args = deepcopy(args)
-        call = ToolCall(tool, copied_args, dict(context or {}))
+        try:
+            call = ToolCall(tool, copied_args, dict(context or {}))
+        except NormalizationError as exc:
+            return Decision(Effect.DENY, str(exc), "normalization", copied_args)
         decided: Decision | None = None
         escalation: Decision | None = None
 
