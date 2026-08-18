@@ -1,6 +1,9 @@
-from collections.abc import Iterable
+from collections import deque
+from collections.abc import Callable, Iterable, Sequence
 from copy import deepcopy
 import re
+from threading import Lock
+import time
 from typing import Any
 import unicodedata
 from urllib.parse import urlsplit
@@ -37,6 +40,54 @@ def tool_denylist(names: Iterable[str]) -> Policy:
             )
         return None
 
+    return policy
+
+
+def rate_limit(
+    tool: str,
+    max_calls: int,
+    per_seconds: float,
+    key: Sequence[str] = (),
+    clock: Callable[[], float] = time.monotonic,
+) -> Policy:
+    """Limit allowed calls per sliding window, optionally keyed by context."""
+    norm_tool = normalize_name(tool)
+    windows: dict[tuple[Any, ...], deque[float]] = {}
+    lock = Lock()
+
+    def window_key(call: ToolCall) -> tuple[Any, ...]:
+        return (call.norm_tool, *(call.context.get(name) for name in key))
+
+    def evict(timestamps: deque[float], now: float) -> None:
+        while timestamps and now - timestamps[0] > per_seconds:
+            timestamps.popleft()
+
+    def policy(call: ToolCall) -> Decision | None:
+        if call.norm_tool != norm_tool:
+            return None
+        with lock:
+            timestamps = windows.setdefault(window_key(call), deque())
+            evict(timestamps, clock())
+            if len(timestamps) >= max_calls:
+                return Decision(
+                    Effect.DENY,
+                    f"rate limit {max_calls} calls per {per_seconds} seconds exceeded",
+                    f"rate_limit:{norm_tool}",
+                    call.args,
+                )
+        return None
+
+    def commit(call: ToolCall) -> None:
+        if call.norm_tool != norm_tool:
+            return
+        with lock:
+            now = clock()
+            timestamps = windows.setdefault(window_key(call), deque())
+            evict(timestamps, now)
+            timestamps.append(now)
+
+    # ponytail: in-process; per-key deque is fine to ~10^4 keys.
+    policy.commit = commit  # type: ignore[attr-defined]
     return policy
 
 
