@@ -61,6 +61,17 @@ class Toolwall:
             else nullcontext()
         )
 
+    @classmethod
+    def from_file(
+        cls,
+        path: str,
+        escalate: Callable[[ToolCall, Decision], bool] | None = None,
+    ) -> "Toolwall":
+        from .loader import load_policy_file
+
+        policies, default, audit = load_policy_file(path)
+        return cls(policies, default=default, audit=audit, escalate=escalate)
+
     def check(
         self,
         tool: str,

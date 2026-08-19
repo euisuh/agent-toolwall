@@ -1,0 +1,25 @@
+version: 1
+default: deny
+audit:
+  redact: [api_key, password]
+tools:
+  read_file:
+    allow: true
+    args:
+      path: {type: str, required: true, matches: "^/workspace/"}
+  http_get:
+    allow: true
+    rate_limit: {max: 5, per_seconds: 60, key: [session_id]}
+    args:
+      url: {type: str, required: true, allow_hosts: [".example.com", docs.python.org]}
+  send_email:
+    allow: true
+    sensitive: true
+    args:
+      to: {type: str, required: true, allow_hosts: [example.com]}
+  submit_order:
+    allow: true
+    sensitive: true
+  "*":
+    args:
+      "*": {denies: "CANARY-[0-9A-F]{4}"}
