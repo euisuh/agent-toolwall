@@ -1,6 +1,5 @@
 import json
 
-import pytest
 import toolwall
 from toolwall.audit import AuditLog
 from toolwall.types import Decision, Effect
@@ -106,12 +105,13 @@ def test_policy_exception_is_denied_and_recorded():
     assert "ValueError('broken')" in audit.records[0]["error"]
 
 
-def test_record_is_written_when_post_decision_step_raises():
+def test_record_is_written_when_escalation_resolves():
     def escalating_policy(call):
         return Decision(Effect.ESCALATE, "sensitive", "sensitive", call.args)
 
     audit = AuditLog()
     wall = toolwall.Toolwall([escalating_policy], default=Effect.DENY, audit=audit)
-    with pytest.raises(NotImplementedError):
-        wall.check("tool", {})
+    assert wall.check("tool", {}).effect is Effect.DENY
     assert len(audit.records) == 1
+    assert audit.records[0]["escalated"] is True
+    assert audit.records[0]["approved"] is False
