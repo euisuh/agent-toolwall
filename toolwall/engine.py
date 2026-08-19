@@ -3,6 +3,8 @@ from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
+from pprint import pformat
+import sys
 from threading import Lock
 from time import perf_counter
 from typing import Any
@@ -16,6 +18,19 @@ from .types import (
     ToolCall,
     ToolCallBlocked,
 )
+
+
+def auto_deny(call: ToolCall, decision: Decision) -> bool:
+    return False
+
+
+def cli_confirm(call: ToolCall, decision: Decision) -> bool:
+    if not sys.stdin.isatty():
+        return False
+    print(f"Tool: {call.tool}")
+    print(f"Args: {pformat(call.args)}")
+    print(f"Reason: {decision.reason}")
+    return sys.stdin.readline().strip().casefold() in {"y", "yes"}
 
 
 class Toolwall:
@@ -32,12 +47,14 @@ class Toolwall:
         *,
         default: Effect,
         audit: AuditLog | None = None,
+        escalate: Callable[[ToolCall, Decision], bool] | None = None,
     ) -> None:
         if default is not Effect.ALLOW and default is not Effect.DENY:
             raise ValueError("default must be Effect.ALLOW or Effect.DENY")
         self.policies = tuple(policies)
         self.default = default
         self.audit = audit
+        self.escalate = auto_deny if escalate is None else escalate
         self._commit_lock = (
             Lock()
             if any(hasattr(policy, "commit") for policy in self.policies)
@@ -65,6 +82,8 @@ class Toolwall:
         copied_context = dict(context or {})
         decision: Decision | None = None
         error: str | None = None
+        escalated = False
+        approved: bool | None = None
         try:
             try:
                 call = ToolCall(tool, copied_args, copied_context)
@@ -87,6 +106,7 @@ class Toolwall:
                         break
                     if result.effect is Effect.ESCALATE:
                         escalation = result
+                        escalated = True
                     else:
                         decided = result
                 except Exception as exc:
@@ -103,11 +123,26 @@ class Toolwall:
                 decision = decided
                 return decision
             if escalation is not None:
-                decision = escalation
-                raise NotImplementedError("escalation is not implemented in M1")
-            decision = decided or Decision(
-                self.default, "default", "default", call.args
-            )
+                escalation = replace(escalation, args=call.args)
+                try:
+                    approved = self.escalate(call, escalation) is True
+                    decision = replace(
+                        escalation,
+                        effect=Effect.ALLOW if approved else Effect.DENY,
+                        reason=f"escalation {'approved' if approved else 'denied'}: {escalation.reason}",
+                    )
+                except Exception as exc:
+                    error = repr(exc)
+                    approved = False
+                    decision = replace(
+                        escalation,
+                        effect=Effect.DENY,
+                        reason=f"escalation_error: {error}",
+                    )
+            if decision is None:
+                decision = decided or Decision(
+                    self.default, "default", "default", call.args
+                )
             if decision.effect is not Effect.ALLOW:
                 return decision
             try:
@@ -140,8 +175,8 @@ class Toolwall:
                         "effect": decision.effect.value,
                         "reason": decision.reason,
                         "policy": decision.policy,
-                        "escalated": False,
-                        "approved": None,
+                        "escalated": escalated,
+                        "approved": approved,
                         "error": error,
                         "duration_ms": (perf_counter() - started) * 1000,
                     }

@@ -43,6 +43,24 @@ def tool_denylist(names: Iterable[str]) -> Policy:
     return policy
 
 
+def sensitive(tools: Iterable[str]) -> Policy:
+    sensitive_tools = frozenset(
+        normalize_name(tool) if tool != "*" else tool for tool in tools
+    )
+
+    def policy(call: ToolCall) -> Decision | None:
+        if "*" in sensitive_tools or call.norm_tool in sensitive_tools:
+            return Decision(
+                Effect.ESCALATE,
+                f"tool {call.tool!r} requires approval",
+                f"sensitive:{call.norm_tool}",
+                call.args,
+            )
+        return None
+
+    return policy
+
+
 def rate_limit(
     tool: str,
     max_calls: int,
