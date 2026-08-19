@@ -14,12 +14,15 @@ tools:
       url: {type: str, required: true, allow_hosts: [".example.com", docs.python.org]}
   send_email:
     allow: true
-    sensitive: true
     args:
       to: {type: str, required: true, allow_hosts: [example.com]}
   submit_order:
     allow: true
     sensitive: true
+  write_file:
+    allow: true
+    args:
+      path: {type: str, required: true, matches: "^/workspace/"}
   "*":
     args:
       "*": {denies: "CANARY-[0-9A-F]{4}"}
