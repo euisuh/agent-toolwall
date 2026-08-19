@@ -34,10 +34,10 @@ def test_emitted_policy_order_matches_contract() -> None:
     policies, default, audit = load_policy_file("toolwall/demo_policy.yaml")
     assert [policy._toolwall_name for policy in policies] == [
         "arg_rules:*",
-        "tool_allowlist:read_file,http_get,send_email,submit_order",
-        "arg_rules:read_file,http_get,send_email",
+        "tool_allowlist:read_file,http_get,send_email,submit_order,write_file",
+        "arg_rules:read_file,http_get,send_email,write_file",
         "rate_limit:http_get",
-        "sensitive:send_email,submit_order",
+        "sensitive:submit_order",
     ]
     assert default is Effect.DENY
     assert audit is not None
@@ -48,7 +48,9 @@ def test_round_trip_matches_hand_constructed_engine() -> None:
     hand = Toolwall(
         [
             arg_rules({"*": {"*": {"denies": "CANARY-[0-9A-F]{4}"}}}),
-            tool_allowlist(["read_file", "http_get", "send_email", "submit_order"]),
+            tool_allowlist(
+                ["read_file", "http_get", "send_email", "submit_order", "write_file"]
+            ),
             arg_rules(
                 {
                     "read_file": {
@@ -72,10 +74,17 @@ def test_round_trip_matches_hand_constructed_engine() -> None:
                             "allow_hosts": ["example.com"],
                         }
                     },
+                    "write_file": {
+                        "path": {
+                            "type": "str",
+                            "required": True,
+                            "matches": "^/workspace/",
+                        }
+                    },
                 }
             ),
             rate_limit("http_get", 5, 60, ["session_id"]),
-            sensitive(["send_email", "submit_order"]),
+            sensitive(["submit_order"]),
         ],
         default=Effect.DENY,
         escalate=lambda *_: True,
@@ -90,6 +99,8 @@ def test_round_trip_matches_hand_constructed_engine() -> None:
         ("send_email", {"to": "person@example.com"}),
         ("send_email", {"to": "attacker@evil.example"}),
         ("submit_order", {"symbol": "AAPL"}),
+        ("write_file", {"path": "/workspace/result.txt"}),
+        ("write_file", {"path": "/etc/cron.d/backdoor"}),
         ("unknown", {"body": "CANARY-7F3A"}),
         ("unknown", {}),
     ]
