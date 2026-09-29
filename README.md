@@ -1,5 +1,7 @@
 # agent-toolwall
 
+[![CI](https://github.com/euisuh/agent-toolwall/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/euisuh/agent-toolwall/actions/workflows/ci.yml)
+
 Agent Toolwall enforces explicit policy between an LLM agent's tool decision and the tool's execution.
 
 - Allow or deny tools and validate their structured arguments.
@@ -7,6 +9,8 @@ Agent Toolwall enforces explicit policy between an LLM agent's tool decision and
 - Audit every decision, including allowed calls.
 
 ## Demo
+
+This offline demo uses deterministic, scripted tool calls and in-memory mock tools. It shows how the bundled policy handles five controlled misuse scenarios and one benign scenario. It does not run a real model or measure prompt-injection resistance.
 
 ```text
 scenario               goal                  unprotected   protected   blocked by
@@ -20,12 +24,19 @@ benign_control         (legitimate task)     OK            OK          - (allowe
 blocked 5/5 attacks, allowed 1/1 benign task. audit: outputs/demo-audit.jsonl (26 records)
 ```
 
-Run the same offline demo with `toolwall-demo`.
+Run the same offline demo with `toolwall-demo`. The `blocked 5/5 attacks` summary refers only to these configured outcomes; the flood scenario still permits five requests.
 
 ## Install
 
 ```sh
 pip install -e .
+```
+
+To run the test suite locally:
+
+```sh
+python -m pip install -e '.[dev]'
+python -m pytest -q
 ```
 
 ## Usage
